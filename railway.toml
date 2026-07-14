@@ -1,0 +1,49 @@
+# =========================================================
+# Railway 部署配置
+# 文档: https://railway.app/docs
+# =========================================================
+# 部署步骤：
+#   1. 在 Railway 创建项目，添加 PostgreSQL 和 Redis 服务
+#   2. 添加 3 个 GitHub 部署源（都指向本仓库）：
+#      - backend (根目录 backend/)   → Service: backend
+#      - worker  (根目录 backend/)   → Service: worker
+#      - frontend (根目录 frontend/admin/) → Service: frontend
+#   3. 在 Railway Variables 中配置环境变量（从 .env.example 复制并调整）
+#   4. 部署顺序：postgres / redis → backend → worker → frontend
+# =========================================================
+
+[environments.production]
+# Railway 会自动注入 DATABASE_URL / REDIS_URL 等变量
+
+# ---------- 后端 API 服务 ----------
+[[services.backend]]
+name = "backend"
+root = "backend"
+runtime = "nixpacks"
+startCommand = "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+# Railway 使用 $PORT 环境变量，不固定 8000
+
+[services.backend.healthcheck]
+path = "/health"
+timeout = 30
+
+# ---------- Celery Worker（异步任务）----------
+[[services.worker]]
+name = "worker"
+root = "backend"
+runtime = "nixpacks"
+startCommand = "celery -A app.core.celery_app worker -l info -Q default,parsing,llm --concurrency=2"
+# Worker 无健康检查（无 HTTP 端口）
+
+# ---------- 前端管理后台（Vue3 + nginx）----------
+[[services.frontend]]
+name = "frontend"
+root = "frontend/admin"
+runtime = "dockerfile"
+# Dockerfile 已配置 nginx 反代 /api → backend:8000
+# 在 Railway 中需要将 backend Service 的域名注入到前端容器
+# 通过 railway.toml 的变量引用：RAILWAY_SERVICE_BACKEND_URL
+
+[services.frontend.healthcheck]
+path = "/"
+timeout = 30
