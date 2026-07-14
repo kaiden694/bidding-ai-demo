@@ -1,0 +1,140 @@
+{{/* =========================================================
+Redis StatefulSet (redis:7-alpine)
+- Headless Service: 稳定 Pod DNS
+- ClusterIP Service: 应用访问入口 (redis-svc:6379)
+- PVC: 1Gi (默认)
+- 开启 AOF 持久化
+========================================================= */}}
+
+# ---- Headless Service ----
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sbaw.fullname" . }}-redis-headless
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "sbaw.componentLabels" (dict "ctx" . "component" "redis") | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    {{- include "sbaw.componentSelectorLabels" (dict "ctx" . "component" "redis") | nindent 4 }}
+  ports:
+    - name: tcp-redis
+      port: 6379
+      targetPort: 6379
+      protocol: TCP
+---
+# ---- ClusterIP Service: 应用访问入口 ----
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sbaw.fullname" . }}-redis
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "sbaw.componentLabels" (dict "ctx" . "component" "redis") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "sbaw.componentSelectorLabels" (dict "ctx" . "component" "redis") | nindent 4 }}
+  ports:
+    - name: tcp-redis
+      port: 6379
+      targetPort: 6379
+      protocol: TCP
+---
+# ---- StatefulSet ----
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sbaw.fullname" . }}-redis
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "sbaw.componentLabels" (dict "ctx" . "component" "redis") | nindent 4 }}
+spec:
+  serviceName: {{ include "sbaw.fullname" . }}-redis-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "sbaw.componentSelectorLabels" (dict "ctx" . "component" "redis") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "sbaw.componentSelectorLabels" (dict "ctx" . "component" "redis") | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- include "sbaw.podSecurityContext" . | nindent 6 }}
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: redis
+          image: {{ include "sbaw.image" .Values.images.redis }}
+          imagePullPolicy: {{ .Values.images.redis.pullPolicy }}
+          # 开启 AOF 持久化，提升数据可靠性
+          command: ["redis-server"]
+          args:
+            - --appendonly
+            - "yes"
+            {{- if .Values.redis.password }}
+            - --requirepass
+            - {{ .Values.redis.password | quote }}
+            {{- end }}
+          ports:
+            - name: tcp-redis
+              containerPort: 6379
+              protocol: TCP
+          # 存活探针：redis-cli ping
+          livenessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          # 就绪探针
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+          resources:
+            {{- toYaml .Values.redis.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          {{- include "sbaw.securityContext" . | nindent 10 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  # PVC 模板：持久化存储（默认 1Gi）
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          {{- include "sbaw.componentLabels" (dict "ctx" . "component" "redis") | nindent 10 }}
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        {{- if .Values.redis.persistence.storageClass }}
+        storageClassName: {{ .Values.redis.persistence.storageClass }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.redis.persistence.size }}

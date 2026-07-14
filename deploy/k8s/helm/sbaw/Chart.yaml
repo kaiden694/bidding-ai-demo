@@ -1,0 +1,15 @@
+apiVersion: v2
+name: sbaw
+description: 智能招投标与合同合规 AI 工作台
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - sbaw
+  - fastapi
+  - vue
+  - ai
+  - rag
+home: https://github.com/sbaw/sbaw
+maintainers:
+  - name: SBAW Team

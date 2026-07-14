@@ -1,0 +1,8 @@
+# Alembic 迁移目录
+#
+# 生成迁移:
+#   alembic revision --autogenerate -m "init schema"
+# 执行迁移:
+#   alembic upgrade head
+# 回滚:
+#   alembic downgrade -1

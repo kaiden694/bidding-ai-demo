@@ -1,0 +1,29 @@
+# =========================================================
+# AlertManager 配置 — Phase 4 T2 告警路由
+#
+# 告警分组：
+#   - 按 alertname 分组，相同告警合并
+#   - group_wait 30s：首次告警等待 30s 后发送（聚合）
+#   - group_interval 5m：同组新增告警间隔
+#   - repeat_interval 4h：重复告警间隔
+#
+# 接收器：
+#   - default：Webhook 回调后端站内信接口（可选）
+#   生产环境可扩展邮件 / 钉钉 / 企业微信接收器
+# =========================================================
+global:
+  resolve_timeout: 5m
+
+route:
+  group_by: ['alertname']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: 'default'
+
+receivers:
+  - name: 'default'
+    webhook_configs:
+      # 告警写入站内信（可选，后端需实现 /api/v1/notifications/alert 接收端点）
+      - url: 'http://backend:8000/api/v1/notifications/alert'
+        send_resolved: true

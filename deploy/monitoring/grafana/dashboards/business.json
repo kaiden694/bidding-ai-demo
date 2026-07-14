@@ -1,0 +1,180 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {"type": "grafana", "uid": "-- Grafana --"},
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "业务指标大盘：项目数 / 比对任务 / 合同审查 / 资质 / 知识库",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "title": "项目数（按状态）",
+      "type": "bargauge",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "fieldConfig": {
+        "defaults": {"unit": "short"},
+        "mappings": []
+      },
+      "targets": [
+        {
+          "expr": "projects_total",
+          "legendFormat": "{{status}}",
+          "refId": "A",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "title": "活跃用户数（24h）",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "fieldConfig": {
+        "defaults": {"unit": "short"},
+        "mappings": []
+      },
+      "targets": [
+        {"expr": "active_users_total", "refId": "A"}
+      ]
+    },
+    {
+      "title": "项目总数",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+      "fieldConfig": {
+        "defaults": {"unit": "short"},
+        "mappings": []
+      },
+      "targets": [
+        {"expr": "sum(projects_total)", "refId": "A"}
+      ]
+    },
+    {
+      "title": "项目状态分布（饼图）",
+      "type": "piechart",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "targets": [
+        {
+          "expr": "projects_total",
+          "legendFormat": "{{status}}",
+          "refId": "A",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "title": "比对任务数（按状态）",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {"drawStyle": "line", "lineInterpolation": "linear", "fillOpacity": 10}
+        }
+      },
+      "targets": [
+        {
+          "expr": "celery_tasks_total{task=~\"comparison.*\"}",
+          "legendFormat": "{{task}} {{status}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "合同审查任务数",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {"drawStyle": "line", "lineInterpolation": "linear", "fillOpacity": 10}
+        }
+      },
+      "targets": [
+        {
+          "expr": "celery_tasks_total{task=~\"contract.*\"}",
+          "legendFormat": "{{task}} {{status}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Celery 任务总量（按状态）",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 16},
+      "fieldConfig": {
+        "defaults": {"unit": "short"},
+        "mappings": []
+      },
+      "targets": [
+        {"expr": "sum(celery_tasks_total{status=\"success\"})", "legendFormat": "成功", "refId": "A"},
+        {"expr": "sum(celery_tasks_total{status=\"failure\"})", "legendFormat": "失败", "refId": "B"}
+      ]
+    },
+    {
+      "title": "Celery 任务耗时 P95",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 6, "w": 18, "x": 6, "y": 16},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {"drawStyle": "line", "lineInterpolation": "linear", "fillOpacity": 10}
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, task) (rate(celery_task_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{task}} P95",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "项目状态流转概览（实时快照）",
+      "type": "table",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 22},
+      "targets": [
+        {
+          "expr": "projects_total",
+          "legendFormat": "{{status}}",
+          "refId": "A",
+          "format": "table",
+          "instant": true
+        }
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["sbaw", "business"],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "业务指标",
+  "uid": "sbaw-business",
+  "version": 1,
+  "weekStart": ""
+}

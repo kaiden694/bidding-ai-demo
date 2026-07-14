@@ -1,0 +1,58 @@
+{{/* =========================================================
+Ingress 路由
+- 前端: / → frontend-service:80
+- 后端 API: /api → backend-service:8000
+- MinIO 控制台: /minio → minio-service:9001
+- 可选 TLS
+========================================================= */}}
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "sbaw.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "sbaw.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host | quote }}
+      secretName: {{ .Values.ingress.tls.secretName }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          # 后端 API：优先匹配 /api 路径
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "sbaw.fullname" . }}-backend
+                port:
+                  number: {{ .Values.backend.service.port }}
+          # MinIO 控制台：/minio 路径
+          - path: /minio
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "sbaw.fullname" . }}-minio
+                port:
+                  number: 9001
+          # 前端：根路径兜底（放在最后）
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "sbaw.fullname" . }}-frontend
+                port:
+                  number: {{ .Values.frontend.service.port }}
+{{- end }}

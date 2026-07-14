@@ -1,0 +1,81 @@
+{{/* =========================================================
+后端 API Deployment
+- 镜像: sbaw-backend (FastAPI uvicorn)
+- 端口: 8000
+- 健康检查: GET /health (liveness + readiness)
+- envFrom: configmap + secret
+- 滚动升级: maxSurge=1, maxUnavailable=0
+========================================================= */}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sbaw.fullname" . }}-backend
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "sbaw.componentLabels" (dict "ctx" . "component" "backend") | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount.backend }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "sbaw.componentSelectorLabels" (dict "ctx" . "component" "backend") | nindent 6 }}
+  # 滚动升级策略：新增 1 个，不可用 0（保证更新期间服务可用）
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        {{- include "sbaw.componentSelectorLabels" (dict "ctx" . "component" "backend") | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- include "sbaw.podSecurityContext" . | nindent 6 }}
+      containers:
+        - name: backend
+          image: {{ include "sbaw.image" .Values.images.backend }}
+          imagePullPolicy: {{ .Values.images.backend.pullPolicy }}
+          # 启动命令：uvicorn 监听 0.0.0.0:8000
+          command: ["uvicorn"]
+          args:
+            - app.main:app
+            - --host
+            - 0.0.0.0
+            - --port
+            - "8000"
+          # 从 ConfigMap + Secret 注入环境变量
+          envFrom:
+            - configMapRef:
+                name: {{ include "sbaw.fullname" . }}-config
+            - secretRef:
+                name: {{ include "sbaw.fullname" . }}-secret
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          # 存活探针：失败则重启容器
+          livenessProbe:
+            {{- toYaml .Values.backend.probes.liveness | nindent 12 }}
+          # 就绪探针：失败则从 Service endpoints 剔除
+          readinessProbe:
+            {{- toYaml .Values.backend.probes.readiness | nindent 12 }}
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 12 }}
+          {{- include "sbaw.securityContext" . | nindent 10 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

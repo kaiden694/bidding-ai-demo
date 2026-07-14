@@ -1,0 +1,161 @@
+# =========================================================
+# 智能招投标与合同合规 AI 工作台 — 基础设施编排
+# 包含: PostgreSQL+pgvector / Redis / MinIO / 后端 API / Celery Worker / Celery Beat / 前端
+# 用法: docker compose up -d
+# =========================================================
+version: "3.9"
+
+services:
+  # ---------------- PostgreSQL + pgvector ----------------
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: sbaw-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sbaw}
+      POSTGRES_USER: ${POSTGRES_USER:-sbaw}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sbaw_change_me}
+      TZ: Asia/Shanghai
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sbaw} -d ${POSTGRES_DB:-sbaw}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------- Redis ----------------
+  redis:
+    image: redis:7-alpine
+    container_name: sbaw-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------- MinIO (对象存储) ----------------
+  minio:
+    image: minio/minio:latest
+    container_name: sbaw-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minio_change_me}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ---------------- 后端 API ----------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sbaw-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      APP_ENV: dev
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      MINIO_ENDPOINT: minio:9000
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://llm:8000/v1}
+      LLM_API_KEY: ${LLM_API_KEY:-not-required-for-local}
+      LLM_MODEL: ${LLM_MODEL:-qwen2.5-14b-instruct}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-http://llm:8000/v1}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-bge-m3}
+      SECRET_KEY: ${SECRET_KEY:-dev-only-change-me}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # ---------------- Celery Worker（异步任务：文档解析 / LLM / 比对 / 合同审查）----------------
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sbaw-celery-worker
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - redis
+    environment:
+      APP_ENV: dev
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      MINIO_ENDPOINT: minio:9000
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://llm:8000/v1}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-http://llm:8000/v1}
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+    command: celery -A app.core.celery_app worker -l info -Q default,parsing,llm
+
+  # ---------------- Celery Beat（定时任务：资质预警每日 09:00 扫描）----------------
+  celery_beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sbaw-celery-beat
+    restart: unless-stopped
+    depends_on:
+      - celery_worker
+    environment:
+      APP_ENV: dev
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      MINIO_ENDPOINT: minio:9000
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+    command: celery -A app.core.celery_app beat -l info
+
+  # ---------------- 前端管理后台（Vue3 + Vite）----------------
+  frontend:
+    build:
+      context: ./frontend/admin
+      dockerfile: Dockerfile
+    container_name: sbaw-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+    environment:
+      # 构建时注入的 API 代理目标（仅 dev 用；生产构建产物由 nginx 反代 /api → backend）
+      VITE_API_BASE: /api/v1
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:

@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sbaw
+  labels:
+    name: sbaw
+    app.kubernetes.io/name: sbaw
+    app.kubernetes.io/managed-by: kubectl

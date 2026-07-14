@@ -1,0 +1,43 @@
+# =========================================================
+# Prometheus 配置 — 指标采集
+# 采集目标：
+#   1. Prometheus 自身
+#   2. sbaw-backend（/metrics，T2 接入后开启）
+#   3. Tempo / Loki 内部指标
+# 保留：30 天
+# =========================================================
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: sbaw-observability
+
+# ---------- 告警规则（T2 接入 alertmanager 时启用） ----------
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+# ---------- 抓取目标 ----------
+scrape_configs:
+  # Prometheus 自身
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # sbaw-backend（T2 配置 metrics endpoint 后启用）
+  - job_name: sbaw-backend
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["host.docker.internal:8000"]
+        labels:
+          service: sbaw-backend
+          env: dev
+
+  # Loki 内部指标
+  - job_name: loki
+    static_configs:
+      - targets: ["loki:3100"]
+
+  # Tempo 内部指标
+  - job_name: tempo
+    static_configs:
+      - targets: ["tempo:3200"]

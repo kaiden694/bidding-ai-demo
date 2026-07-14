@@ -1,0 +1,142 @@
+# =========================================================
+# 生产环境覆盖配置
+# 用法: helm install sbaw ./deploy/k8s/helm/sbaw -f values.yaml -f values-prod.yaml
+# =========================================================
+
+# ---- 生产环境标识 ----
+env:
+  APP_ENV: prod
+  APP_LOG_LEVEL: WARNING
+  CORS_ORIGINS: "https://sbaw.example.com"
+  OTEL_ENABLED: "true"
+
+# ---- 生产副本数 ----
+replicaCount:
+  backend: 3
+  frontend: 3
+  celeryWorker: 3
+
+# ---- 生产镜像 tag（固定版本）----
+images:
+  backend:
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+  frontend:
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+
+# ---- 生产数据库连接池 ----
+postgres:
+  poolSize: 20
+  maxOverflow: 40
+  persistence:
+    size: 50Gi
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+
+# ---- 生产 Redis ----
+redis:
+  persistence:
+    size: 5Gi
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+# ---- 生产 MinIO ----
+minio:
+  persistence:
+    size: 200Gi
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+
+# ---- 生产后端资源 ----
+backend:
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+
+# ---- 生产前端资源 ----
+frontend:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+# ---- 生产 Celery 资源 ----
+celeryWorker:
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+
+celeryBeat:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# ---- 生产自动扩缩容 ----
+autoscaling:
+  enabled: true
+  backend:
+    minReplicas: 3
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 70
+
+# ---- 生产 Ingress ----
+ingress:
+  enabled: true
+  className: nginx
+  host: sbaw.example.com
+  tls:
+    enabled: true
+    secretName: sbaw-tls
+
+# ---- 生产 PDB ----
+pdb:
+  enabled: true
+  backend:
+    minAvailable: 2
+
+# ---- 生产 NetworkPolicy ----
+networkPolicy:
+  enabled: true
+
+# ---- 生产 Pod 安全上下文 ----
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+securityContext:
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false
+  allowPrivilegeEscalation: false

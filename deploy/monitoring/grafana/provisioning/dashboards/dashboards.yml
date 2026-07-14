@@ -1,0 +1,19 @@
+# =========================================================
+# Grafana Dashboard 自动加载配置 — Phase 4 T2
+#
+# 启动时自动扫描 /var/lib/grafana/dashboards/ 目录下的 JSON 文件并导入
+# 大盘 JSON 文件挂载到容器内该路径
+# =========================================================
+apiVersion: 1
+
+providers:
+  - name: 'sbaw-dashboards'
+    orgId: 1
+    folder: 'SBAW 监控大盘'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

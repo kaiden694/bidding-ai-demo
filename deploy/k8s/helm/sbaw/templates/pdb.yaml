@@ -1,0 +1,19 @@
+{{/* =========================================================
+PodDisruptionBudget
+- backend: minAvailable=1 (默认)
+- 保证滚动升级 / 节点维护期间至少 1 个后端 Pod 可用
+========================================================= */}}
+{{- if .Values.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "sbaw.fullname" . }}-backend
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "sbaw.componentLabels" (dict "ctx" . "component" "backend") | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.pdb.backend.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "sbaw.componentSelectorLabels" (dict "ctx" . "component" "backend") | nindent 6 }}
+{{- end }}

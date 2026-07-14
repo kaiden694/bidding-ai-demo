@@ -1,0 +1,114 @@
+# =========================================================
+# Promtail 配置 — 日志采集 agent
+# 采集源：
+#   1. /var/log/sbaw/*.log（应用文件日志，JSON 格式）
+#   2. docker logs（容器 stdout，通过 docker.sock 元数据）
+# 推送目标：Loki（http://loki:3100）
+# =========================================================
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+  log_level: info
+
+# ---------- 位置记录（记录已读取的 offset，重启后断点续采） ----------
+positions:
+  filename: /tmp/positions.yaml
+
+# ---------- 客户端：推送到 Loki ----------
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+    backoff_config:
+      min_period: 500ms
+      max_period: 5m
+      max_retries: 10
+    batchwait: 1s
+    batchsize: 1048576  # 1MB
+
+# ---------- 抓取配置 ----------
+scrape_configs:
+  # ---------------- 1. 应用文件日志（JSON 格式） ----------------
+  - job_name: sbaw_app_logs
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: sbaw-backend
+          app: sbaw
+          source: file
+          __path__: /var/log/sbaw/*.log
+    pipeline_stages:
+      # 解析 JSON 行（应用输出单行 JSON）
+      - json:
+          expressions:
+            level: level
+            message: message
+            request_id: request_id
+            trace_id: trace_id
+            span_id: span_id
+            module: module
+            timestamp: timestamp
+      # 用日志自带时间戳作为 Loki 时间
+      - timestamp:
+          source: timestamp
+          format: RFC3339Nano
+          action_on_failure: skip
+      # 提取为 Loki 标签（便于 LogQL 过滤）
+      - labels:
+          level:
+          request_id:
+          trace_id:
+          module:
+      # 输出仅保留 message（便于查询展示）
+      - output:
+          source: message
+
+  # ---------------- 2. Docker 容器日志（stdout） ----------------
+  - job_name: docker_logs
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+        # 仅采集 sbaw-* 容器
+        filters:
+          - name: name
+            values: ["sbaw-"]
+    relabel_configs:
+      # 提取容器名作为标签
+      - source_labels: ["__meta_docker_container_name"]
+        regex: '/(.*)'
+        target_label: container_name
+      # 提取镜像名
+      - source_labels: ["__meta_docker_container_label_com_docker_compose_service"]
+        target_label: service
+      # 提取日志类型（app/nginx 等）
+      - source_labels: ["__meta_docker_container_label_log_type"]
+        target_label: log_type
+        regex: "(.+)"
+        replacement: "${1}"
+        default: "app"
+    pipeline_stages:
+      # 尝试解析 JSON（应用 stdout 为 JSON，nginx 等非 JSON 会失败跳过）
+      - json:
+          expressions:
+            level: level
+            message: message
+            request_id: request_id
+            trace_id: trace_id
+            span_id: span_id
+            module: module
+            timestamp: timestamp
+          on_missing: skip
+      # 若解析出 timestamp 则使用
+      - match:
+          selector: '{job="docker_logs"} |~ ".*\"timestamp\".*"'
+          action: keep
+          stages:
+            - timestamp:
+                source: timestamp
+                format: RFC3339Nano
+                action_on_failure: skip
+            - labels:
+                level:
+                request_id:
+                trace_id:
+                module:
+            - output:
+                source: message

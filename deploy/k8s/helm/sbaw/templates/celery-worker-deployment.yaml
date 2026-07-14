@@ -1,0 +1,66 @@
+{{/* =========================================================
+Celery Worker Deployment
+- 异步任务执行器（文档解析 / LLM 调用 / 比对 / 合同审查）
+- 队列: default,parsing,llm
+- 无需 Service（仅消费 Redis broker）
+- envFrom: configmap + secret
+========================================================= */}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sbaw.fullname" . }}-celery-worker
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "sbaw.componentLabels" (dict "ctx" . "component" "celery-worker") | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount.celeryWorker }}
+  selector:
+    matchLabels:
+      {{- include "sbaw.componentSelectorLabels" (dict "ctx" . "component" "celery-worker") | nindent 6 }}
+  # 滚动升级策略：新增 1 个，不可用 0（避免任务中断期间无 worker）
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        {{- include "sbaw.componentSelectorLabels" (dict "ctx" . "component" "celery-worker") | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- include "sbaw.podSecurityContext" . | nindent 6 }}
+      # 优雅终止：发送 SIGTERM 后等待任务完成
+      terminationGracePeriodSeconds: 300
+      containers:
+        - name: celery-worker
+          image: {{ include "sbaw.image" .Values.images.backend }}
+          imagePullPolicy: {{ .Values.images.backend.pullPolicy }}
+          # 启动命令：消费 default / parsing / llm 三个队列
+          command: ["/bin/sh", "-c"]
+          args:
+            - {{ .Values.celeryWorker.command | quote }}
+          # 从 ConfigMap + Secret 注入环境变量
+          envFrom:
+            - configMapRef:
+                name: {{ include "sbaw.fullname" . }}-config
+            - secretRef:
+                name: {{ include "sbaw.fullname" . }}-secret
+          resources:
+            {{- toYaml .Values.celeryWorker.resources | nindent 12 }}
+          {{- include "sbaw.securityContext" . | nindent 10 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

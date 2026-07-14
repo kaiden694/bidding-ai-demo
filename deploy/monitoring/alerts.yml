@@ -1,0 +1,89 @@
+# =========================================================
+# Prometheus 告警规则 — Phase 4 T2
+#
+# 告警分级：
+#   critical: 影响服务的严重问题（5xx 错误率/熔断器）
+#   warning:  需关注的潜在问题（延迟/连接池/磁盘）
+# =========================================================
+groups:
+  - name: sbaw-alerts
+    rules:
+      # ---------------- HTTP 5xx 错误率 ----------------
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m]))
+          / sum(rate(http_requests_total[5m])) > 0.01
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "5xx 错误率 > 1%"
+          description: "过去 5 分钟内 5xx 错误率超过 1%，当前值 {{ $value | humanizePercentage }}"
+
+      # ---------------- HTTP P95 延迟 ----------------
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(http_request_duration_seconds_bucket[5m]))
+          ) > 3
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 延迟 > 3s"
+          description: "HTTP 请求 P95 延迟超过 3 秒，当前值 {{ $value }}s"
+
+      # ---------------- DB 连接池使用率 ----------------
+      - alert: DBPoolHighUsage
+        expr: |
+          db_pool_checked_out / db_pool_size > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DB 连接池使用率 > 80%"
+          description: "数据库连接池使用率持续超过 80%，当前已检出 {{ $value | humanizePercentage }}"
+
+      # ---------------- LLM 熔断器触发 ----------------
+      - alert: LLMBreakerTripped
+        expr: llm_circuit_breaker_active > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "LLM 熔断器触发"
+          description: "有 {{ $value }} 个 LLM provider 处于熔断期"
+
+      # ---------------- LLM 错误率 ----------------
+      - alert: LLMHighErrorRate
+        expr: |
+          sum(rate(llm_requests_total{success="false"}[5m]))
+          / sum(rate(llm_requests_total[5m])) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "LLM 错误率 > 20%"
+          description: "LLM 请求错误率超过 20%，当前值 {{ $value | humanizePercentage }}"
+
+      # ---------------- 磁盘使用率 ----------------
+      - alert: DiskHighUsage
+        expr: |
+          (node_filesystem_size_bytes - node_filesystem_avail_bytes)
+          / node_filesystem_size_bytes > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "磁盘使用率 > 85%"
+          description: "磁盘 {{ $labels.mountpoint }} 使用率超过 85%，当前值 {{ $value | humanizePercentage }}"
+
+      # ---------------- 服务宕机 ----------------
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "服务 {{ $labels.job }} 宕机"
+          description: "{{ $labels.instance }} 已离线超过 1 分钟"

@@ -1,0 +1,69 @@
+{{/* =========================================================
+ConfigMap：非敏感配置（应用名 / 环境标识 / 各服务主机端口等）
+后端 / Celery 通过 envFrom 一次性注入
+注意：主机名使用 Helm 模板生成的 Service 名，确保与实际 Service 匹配
+========================================================= */}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sbaw.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "sbaw.labels" . | nindent 4 }}
+data:
+  # ---- 应用通用 ----
+  APP_NAME: {{ .Values.env.APP_NAME | quote }}
+  APP_ENV: {{ .Values.env.APP_ENV | quote }}
+  APP_HOST: {{ .Values.env.APP_HOST | quote }}
+  APP_PORT: {{ .Values.env.APP_PORT | quote }}
+  APP_LOG_LEVEL: {{ .Values.env.APP_LOG_LEVEL | quote }}
+  TZ: {{ .Values.env.TZ | quote }}
+  CORS_ORIGINS: {{ .Values.env.CORS_ORIGINS | quote }}
+
+  # ---- PostgreSQL 连接（非敏感部分）----
+  # host 使用 Helm 生成的 Service 名，确保与 postgres-statefulset.yaml 中的 Service 名一致
+  POSTGRES_HOST: {{ include "sbaw.fullname" . }}-postgres
+  POSTGRES_PORT: {{ .Values.postgres.port | quote }}
+  POSTGRES_DB: {{ .Values.postgres.database | quote }}
+  POSTGRES_USER: {{ .Values.postgres.user | quote }}
+  POSTGRES_POOL_SIZE: {{ .Values.postgres.poolSize | quote }}
+  POSTGRES_MAX_OVERFLOW: {{ .Values.postgres.maxOverflow | quote }}
+
+  # ---- Redis 连接（非敏感部分）----
+  REDIS_HOST: {{ include "sbaw.fullname" . }}-redis
+  REDIS_PORT: {{ .Values.redis.port | quote }}
+  REDIS_DB: {{ .Values.redis.db | quote }}
+
+  # ---- MinIO 连接（非敏感部分）----
+  MINIO_ENDPOINT: {{ printf "%s-minio:9000" (include "sbaw.fullname" .) }}
+  MINIO_ACCESS_KEY: {{ .Values.minio.accessKey | quote }}
+  MINIO_BUCKET: {{ .Values.minio.bucket | quote }}
+  MINIO_SECURE: {{ .Values.minio.secure | quote }}
+
+  # ---- LLM 接口 ----
+  LLM_BASE_URL: {{ .Values.llm.baseUrl | quote }}
+  LLM_MODEL: {{ .Values.llm.model | quote }}
+  LLM_TIMEOUT: {{ .Values.llm.timeout | quote }}
+  LLM_MAX_RETRIES: {{ .Values.llm.maxRetries | quote }}
+  LLM_FALLBACK_MODELS: {{ .Values.llm.fallbackModels | quote }}
+
+  # ---- Embedding 接口 ----
+  EMBEDDING_BASE_URL: {{ .Values.embedding.baseUrl | quote }}
+  EMBEDDING_MODEL: {{ .Values.embedding.model | quote }}
+  EMBEDDING_DIM: {{ .Values.embedding.dim | quote }}
+
+  # ---- Reranker / RAG ----
+  RERANKER_MODEL: {{ .Values.reranker.model | quote }}
+  RERANKER_TOP_K: {{ .Values.reranker.topK | quote }}
+  RAG_CHUNK_SIZE: {{ .Values.rag.chunkSize | quote }}
+  RAG_CHUNK_OVERLAP: {{ .Values.rag.chunkOverlap | quote }}
+  RAG_RETRIEVE_TOP_K: {{ .Values.rag.retrieveTopK | quote }}
+
+  # ---- Celery broker / result backend（明文 URL，密码通过 Secret 注入更安全；此处默认无密码）----
+  CELERY_BROKER_URL: {{ include "sbaw.celeryBrokerUrl" . | quote }}
+  CELERY_RESULT_BACKEND: {{ include "sbaw.celeryResultBackend" . | quote }}
+
+  # ---- OpenTelemetry ----
+  OTEL_ENABLED: {{ .Values.env.OTEL_ENABLED | quote }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.env.OTEL_EXPORTER_OTLP_ENDPOINT | quote }}
+  OTEL_SERVICE_NAME: "sbaw-backend"

@@ -1,0 +1,159 @@
+{{/* =========================================================
+NetworkPolicy（可选，默认禁用）
+限制 Pod 间通信，遵循最小权限原则：
+- backend: 仅允许来自 ingress-nginx 命名空间 + frontend 访问 8000
+- frontend: 仅允许来自 ingress-nginx 命名空间访问 80
+- postgres: 仅允许 backend / celery 访问 5432
+- redis: 仅允许 backend / celery 访问 6379
+- minio: 仅允许 backend / celery 访问 9000 + ingress 访问 9001
+========================================================= */}}
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "sbaw.fullname" . }}-backend-netpol
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "sbaw.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: backend
+  policyTypes:
+    - Ingress
+  ingress:
+    # 允许 ingress-nginx 控制器访问后端 8000
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8000
+    # 允许前端访问后端 API
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: frontend
+      ports:
+        - protocol: TCP
+          port: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "sbaw.fullname" . }}-frontend-netpol
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "sbaw.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: frontend
+  policyTypes:
+    - Ingress
+  ingress:
+    # 允许 ingress-nginx 控制器访问前端 80
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "sbaw.fullname" . }}-postgres-netpol
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "sbaw.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    # 仅允许 backend / celery-worker / celery-beat 访问 PostgreSQL 5432
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: backend
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: celery-worker
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: celery-beat
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "sbaw.fullname" . }}-redis-netpol
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "sbaw.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: redis
+  policyTypes:
+    - Ingress
+  ingress:
+    # 仅允许 backend / celery 访问 Redis 6379
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: backend
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: celery-worker
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: celery-beat
+      ports:
+        - protocol: TCP
+          port: 6379
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "sbaw.fullname" . }}-minio-netpol
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "sbaw.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: minio
+  policyTypes:
+    - Ingress
+  ingress:
+    # 允许 backend / celery 访问 S3 API 9000
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: backend
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: celery-worker
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: celery-beat
+      ports:
+        - protocol: TCP
+          port: 9000
+    # 允许 ingress-nginx 访问 MinIO 控制台 9001
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 9001
+{{- end }}

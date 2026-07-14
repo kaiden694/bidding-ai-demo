@@ -1,0 +1,97 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtualenv
+.venv/
+venv/
+env/
+ENV/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+coverage.xml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node/Frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Logs
+*.log
+logs/
+
+# DB
+*.sqlite3
+*.db
+
+# Build artifacts
+*.spec
+
+# Trae internal
+.trae/
+
+# Logs and temporary
+logs/
+*.log
+*.log.zip
+
+# Frontend build
+frontend/admin/dist/
+
+# Secrets (never commit)
+.env
+.env.*
+!.env.example
+
+# Trae IDE working files
+.trae-cn/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Test cache
+.pytest_cache/
+
+# Demo post (local draft, will paste to forum directly)
+DEMO_POST.md
+
+# VPS deployment configs (may contain secrets)
+deploy/vps/

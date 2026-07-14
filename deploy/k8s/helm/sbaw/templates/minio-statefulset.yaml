@@ -1,0 +1,162 @@
+{{/* =========================================================
+MinIO StatefulSet (minio/minio:latest)
+- Headless Service: 稳定 Pod DNS
+- ClusterIP Service: 应用访问入口 (minio-svc:9000 / 控制台 9001)
+- PVC: 50Gi (默认)
+- 启动 S3 服务 (9000) + 控制台 (9001)
+========================================================= */}}
+
+# ---- Headless Service ----
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sbaw.fullname" . }}-minio-headless
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "sbaw.componentLabels" (dict "ctx" . "component" "minio") | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    {{- include "sbaw.componentSelectorLabels" (dict "ctx" . "component" "minio") | nindent 4 }}
+  ports:
+    - name: s3
+      port: 9000
+      targetPort: 9000
+      protocol: TCP
+    - name: console
+      port: 9001
+      targetPort: 9001
+      protocol: TCP
+---
+# ---- ClusterIP Service: 应用访问入口 ----
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sbaw.fullname" . }}-minio
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "sbaw.componentLabels" (dict "ctx" . "component" "minio") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "sbaw.componentSelectorLabels" (dict "ctx" . "component" "minio") | nindent 4 }}
+  ports:
+    # S3 API 端口（应用通过此端口访问对象存储）
+    - name: s3
+      port: 9000
+      targetPort: 9000
+      protocol: TCP
+    # Web 控制台端口（通过 Ingress 暴露）
+    - name: console
+      port: 9001
+      targetPort: 9001
+      protocol: TCP
+---
+# ---- StatefulSet ----
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "sbaw.fullname" . }}-minio
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "sbaw.componentLabels" (dict "ctx" . "component" "minio") | nindent 4 }}
+spec:
+  serviceName: {{ include "sbaw.fullname" . }}-minio-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "sbaw.componentSelectorLabels" (dict "ctx" . "component" "minio") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "sbaw.componentSelectorLabels" (dict "ctx" . "component" "minio") | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- include "sbaw.podSecurityContext" . | nindent 6 }}
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: minio
+          image: {{ include "sbaw.image" .Values.images.minio }}
+          imagePullPolicy: {{ .Values.images.minio.pullPolicy }}
+          # 启动 S3 服务 + 控制台
+          command: ["minio"]
+          args:
+            - server
+            - /data
+            - --console-address
+            - ":9001"
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "sbaw.fullname" . }}-config
+                  key: MINIO_ACCESS_KEY
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "sbaw.fullname" . }}-secret
+                  key: MINIO_SECRET_KEY
+          ports:
+            # S3 API
+            - name: s3
+              containerPort: 9000
+              protocol: TCP
+            # Web 控制台
+            - name: console
+              containerPort: 9001
+              protocol: TCP
+          # 存活探针：/minio/health/live
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: 9000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          # 就绪探针：/minio/health/ready
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: 9000
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          resources:
+            {{- toYaml .Values.minio.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          {{- include "sbaw.securityContext" . | nindent 10 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  # PVC 模板：持久化存储（默认 50Gi）
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          {{- include "sbaw.componentLabels" (dict "ctx" . "component" "minio") | nindent 10 }}
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        {{- if .Values.minio.persistence.storageClass }}
+        storageClassName: {{ .Values.minio.persistence.storageClass }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.minio.persistence.size }}

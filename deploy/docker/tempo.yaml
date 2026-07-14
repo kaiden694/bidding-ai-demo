@@ -1,0 +1,50 @@
+# =========================================================
+# Tempo 配置 — 链路追踪后端（接收 OTLP，对接 Grafana 查询）
+# 存储：本地文件系统（单节点模式）
+# =========================================================
+server:
+  http_listen_port: 3200
+  log_level: info
+
+# ---------- 分布式追踪存储 ----------
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317  # 应用推送 traces 的 gRPC 端口
+        http:
+          endpoint: 0.0.0.0:4318
+
+# ---------- 摄入 ----------
+ingester:
+  trace_idle_period: 10s
+  max_block_bytes: 1048576
+  max_block_duration: 5m
+
+# ---------- 压缩 ----------
+compactor:
+  compaction:
+    compaction_interval: 30s
+    retention_enabled: true
+    retention: 720h  # 30 天
+
+# ---------- 存储（本地） ----------
+storage:
+  trace:
+    backend: local
+    local:
+      path: /var/tempo
+    wal:
+      path: /var/tempo/wal
+
+# ---------- 查询 ----------
+querier:
+  max_concurrent_queries: 10
+
+# ---------- 指标生成（可选，供 Prometheus 拉取） ----------
+metrics_generator:
+  register_metrics_at_tenant_id: "fake"
+  registry:
+    external_labels:
+      source: tempo

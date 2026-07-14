@@ -1,0 +1,278 @@
+# =========================================================
+# 智能招投标与合同合规 AI 工作台 — Helm Chart 默认配置
+# 用法: helm install sbaw ./deploy/k8s/helm/sbaw -f values.yaml
+# =========================================================
+
+# ---- 全局 ----
+nameOverride: ""
+fullnameOverride: ""
+
+# ---- 镜像 ----
+images:
+  backend:
+    repository: sbaw-backend
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+  frontend:
+    repository: sbaw-frontend
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+  postgres:
+    repository: pgvector/pgvector
+    tag: "pg16"
+    pullPolicy: IfNotPresent
+  redis:
+    repository: redis
+    tag: "7-alpine"
+    pullPolicy: IfNotPresent
+  minio:
+    repository: minio/minio
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+# ---- 副本数 ----
+replicaCount:
+  backend: 2
+  frontend: 2
+  celeryWorker: 2
+
+# ---- 应用通用环境变量 ----
+env:
+  APP_NAME: smart-bidding-ai-workbench
+  APP_ENV: dev             # dev | staging | prod
+  APP_HOST: 0.0.0.0
+  APP_PORT: "8000"
+  APP_LOG_LEVEL: INFO      # DEBUG | INFO | WARNING | ERROR
+  TZ: Asia/Shanghai
+  # CORS 来源（逗号分隔）
+  CORS_ORIGINS: "https://sbaw.example.com"
+  # OpenTelemetry
+  OTEL_ENABLED: "false"
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+
+# ---- PostgreSQL ----
+postgres:
+  enabled: true
+  host: postgres-svc        # 集群内 Service 名
+  port: 5432
+  database: sbaw
+  user: sbaw
+  password: sbaw_change_me  # 生产环境必须通过 --set 覆盖
+  poolSize: 10
+  maxOverflow: 20
+  persistence:
+    storageClass: ""
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+# ---- Redis ----
+redis:
+  enabled: true
+  host: redis-svc
+  port: 6379
+  password: ""
+  db: "0"
+  brokerDb: "1"
+  backendDb: "2"
+  persistence:
+    storageClass: ""
+    size: 1Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# ---- MinIO 对象存储 ----
+minio:
+  enabled: true
+  endpoint: minio-svc:9000   # 内部访问地址
+  consolePort: 9001
+  accessKey: minio
+  secretKey: minio_change_me  # 生产环境必须通过 --set 覆盖
+  bucket: sbaw-files
+  secure: "false"
+  persistence:
+    storageClass: ""
+    size: 50Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+# ---- LLM (OpenAI 兼容接口) ----
+llm:
+  baseUrl: http://llm:8000/v1
+  apiKey: not-required-for-local  # 生产环境通过 --set 覆盖
+  model: qwen2.5-14b-instruct
+  timeout: "120"
+  maxRetries: "3"
+  fallbackModels: ""
+
+# ---- Embedding ----
+embedding:
+  baseUrl: http://llm:8000/v1
+  apiKey: not-required-for-local
+  model: bge-m3
+  dim: "1024"
+
+# ---- Reranker / RAG ----
+reranker:
+  model: bge-reranker-v2-m3
+  topK: "5"
+rag:
+  chunkSize: "512"
+  chunkOverlap: "64"
+  retrieveTopK: "20"
+
+# ---- 安全敏感配置（生产必须覆盖）----
+secrets:
+  secretKey: dev-only-change-me        # JWT 会话密钥
+  jwtAlgorithm: HS256
+  jwtAccessExpireMinutes: "120"
+  jwtRefreshExpireDays: "7"
+
+# ---- 后端服务 ----
+backend:
+  service:
+    type: ClusterIP
+    port: 8000
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  # 健康检查
+  probes:
+    liveness:
+      httpGet:
+        path: /health
+        port: 8000
+      initialDelaySeconds: 30
+      periodSeconds: 15
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readiness:
+      httpGet:
+        path: /health
+        port: 8000
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+
+# ---- 前端服务 ----
+frontend:
+  service:
+    type: ClusterIP
+    port: 80
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  probes:
+    liveness:
+      httpGet:
+        path: /
+        port: 80
+      initialDelaySeconds: 10
+      periodSeconds: 15
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readiness:
+      httpGet:
+        path: /
+        port: 80
+      initialDelaySeconds: 5
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+
+# ---- Celery Worker ----
+celeryWorker:
+  command: "celery -A app.core.celery_app worker -l info -Q default,parsing,llm"
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+# ---- Celery Beat ----
+celeryBeat:
+  command: "celery -A app.core.celery_app beat -l info"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# ---- 自动扩缩容 ----
+autoscaling:
+  enabled: true
+  backend:
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+# ---- Ingress ----
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+  host: sbaw.example.com
+  tls:
+    enabled: false
+    secretName: sbaw-tls
+
+# ---- PodDisruptionBudget ----
+pdb:
+  enabled: true
+  backend:
+    minAvailable: 1
+
+# ---- NetworkPolicy ----
+networkPolicy:
+  enabled: false
+
+# ---- 镜像拉取凭据 ----
+imagePullSecrets: []
+# - name: registry-secret
+
+# ---- 节点选择 / 亲和 ----
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# ---- Pod 安全上下文 ----
+podSecurityContext:
+  runAsNonRoot: false
+  fsGroup: 1000
+securityContext:
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false

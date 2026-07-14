@@ -1,0 +1,70 @@
+{{/* =========================================================
+前端 Deployment
+- 镜像: sbaw-frontend (Vue3 + Nginx)
+- 端口: 80
+- 健康检查: GET / (liveness + readiness)
+- 滚动升级: maxSurge=1, maxUnavailable=0
+- 通过 ConfigMap 注入非敏感环境变量（构建期已注入 API 路径）
+========================================================= */}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sbaw.fullname" . }}-frontend
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "sbaw.componentLabels" (dict "ctx" . "component" "frontend") | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount.frontend }}
+  selector:
+    matchLabels:
+      {{- include "sbaw.componentSelectorLabels" (dict "ctx" . "component" "frontend") | nindent 6 }}
+  # 滚动升级策略：新增 1 个，不可用 0
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        {{- include "sbaw.componentSelectorLabels" (dict "ctx" . "component" "frontend") | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- include "sbaw.podSecurityContext" . | nindent 6 }}
+      containers:
+        - name: frontend
+          image: {{ include "sbaw.image" .Values.images.frontend }}
+          imagePullPolicy: {{ .Values.images.frontend.pullPolicy }}
+          # Nginx 默认 CMD 启动，前台运行
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          # 前端构建期注入的 API 代理目标（生产由 nginx 反代 /api → backend）
+          env:
+            - name: VITE_API_BASE
+              value: /api/v1
+          # 存活探针：Nginx 首页
+          livenessProbe:
+            {{- toYaml .Values.frontend.probes.liveness | nindent 12 }}
+          # 就绪探针
+          readinessProbe:
+            {{- toYaml .Values.frontend.probes.readiness | nindent 12 }}
+          resources:
+            {{- toYaml .Values.frontend.resources | nindent 12 }}
+          {{- include "sbaw.securityContext" . | nindent 10 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

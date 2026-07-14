@@ -1,0 +1,59 @@
+# =========================================================
+# Prometheus 配置 — Phase 4 T2 监控告警
+#
+# 采集目标：
+#   1. sbaw-backend（/metrics 端点，由 FastAPI 暴露）
+#   2. node-exporter（主机指标：CPU/内存/磁盘）
+#   3. celery-exporter（Celery 任务指标）
+#
+# 告警规则：alerts.yml
+# 告警路由：alertmanager.yml
+#
+# 用法：
+#   docker compose -f deploy/docker/docker-compose.monitoring.yml up -d
+#   Prometheus UI: http://localhost:9090
+# =========================================================
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: sbaw-monitoring
+
+# ---------- 告警规则 ----------
+rule_files:
+  - /etc/prometheus/rules/alerts.yml
+
+# ---------- 告警路由 ----------
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+# ---------- 抓取目标 ----------
+scrape_configs:
+  # sbaw-backend（FastAPI /metrics 端点）
+  - job_name: 'sbaw-backend'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['backend:8000']
+        labels:
+          service: sbaw-backend
+
+  # 主机指标（CPU/内存/磁盘/网络）
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          service: node
+
+  # Celery 任务指标
+  - job_name: 'celery'
+    static_configs:
+      - targets: ['celery-exporter:9556']
+        labels:
+          service: celery
+
+  # Prometheus 自身
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
