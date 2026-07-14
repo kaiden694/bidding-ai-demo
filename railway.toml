@@ -2,47 +2,42 @@
 # Railway 部署配置
 # 文档: https://railway.app/docs
 # =========================================================
-# 部署步骤：
-#   1. 在 Railway 创建项目，添加 PostgreSQL 和 Redis 服务
-#   2. 添加 3 个 GitHub 部署源（都指向本仓库）：
-#      - backend (根目录 backend/)   → Service: backend
-#      - worker  (根目录 backend/)   → Service: worker
-#      - frontend (根目录 frontend/admin/) → Service: frontend
-#   3. 在 Railway Variables 中配置环境变量（从 .env.example 复制并调整）
-#   4. 部署顺序：postgres / redis → backend → worker → frontend
+# 仓库结构：
+#   /Dockerfile              ← 根目录 Dockerfile（backend + worker 共用）
+#   /backend/                ← Python 后端代码
+#   /frontend/admin/Dockerfile  ← 前端 Dockerfile（nginx + Vue3）
+#
+# 部署方式：
+#   1. backend service：Root Directory = /（默认），用根 Dockerfile
+#   2. worker service：Root Directory = /，用根 Dockerfile，启动命令覆盖
+#   3. frontend service：Root Directory = frontend/admin，用子目录 Dockerfile
 # =========================================================
 
 [environments.production]
-# Railway 会自动注入 DATABASE_URL / REDIS_URL 等变量
 
 # ---------- 后端 API 服务 ----------
-[[services.backend]]
-name = "backend"
-root = "backend"
-runtime = "dockerfile"
-# 使用 Dockerfile 构建（已声明 apt-get 系统依赖 + pip install）
-# 启动命令由 Dockerfile CMD 提供，Railway 会自动注入 $PORT
+# Railway 控制台配置：
+#   Service Name: backend
+#   Root Directory: / (默认，不需要改)
+#   Start Command: (留空，用 Dockerfile CMD)
 
-[services.backend.healthcheck]
+[config.backend.healthcheck]
 path = "/health"
 timeout = 60
 
-# ---------- Celery Worker（异步任务）----------
-[[services.worker]]
-name = "worker"
-root = "backend"
-runtime = "dockerfile"
-# 复用 backend 镜像，启动命令在 Railway Service Settings 中配置
-# Start Command: celery -A app.core.celery_app worker -l info -Q default,parsing,llm --concurrency=2
+# ---------- Celery Worker 服务 ----------
+# Railway 控制台配置：
+#   Service Name: worker
+#   Root Directory: / (默认，不需要改)
+#   Start Command: celery -A app.core.celery_app worker -l info -Q default,parsing,llm --concurrency=2
 
-# ---------- 前端管理后台（Vue3 + nginx）----------
-[[services.frontend]]
-name = "frontend"
-root = "frontend/admin"
-runtime = "dockerfile"
-# Dockerfile 已配置 nginx 反代 /api → ${BACKEND_HOST}
-# 在 Railway Variables 中设置 BACKEND_HOST=${{backend.RAILWAY_PUBLIC_DOMAIN}}:80
+# ---------- 前端管理后台服务 ----------
+# Railway 控制台配置：
+#   Service Name: frontend
+#   Root Directory: frontend/admin
+#   Start Command: (留空，用 Dockerfile CMD)
+#   Variables: BACKEND_HOST=${{backend.RAILWAY_PUBLIC_DOMAIN}}:80
 
-[services.frontend.healthcheck]
+[config.frontend.healthcheck]
 path = "/"
 timeout = 30
