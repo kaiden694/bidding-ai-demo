@@ -169,22 +169,11 @@ interface MenuItem {
   children?: MenuItem[];
 }
 
-/** 菜单配置：与路由定义对应，按权限点过滤 */
+/** 菜单配置：与路由定义对应，按权限点过滤
+ * 顺序：工作台 → 业务管理 → 系统管理
+ */
 const allMenus: MenuItem[] = [
   { path: "/dashboard", title: "工作台", icon: "House" },
-  {
-    path: "/system",
-    title: "系统管理",
-    icon: "Setting",
-    children: [
-      { path: "/system/users", title: "用户管理", icon: "User", permission: "user:view" },
-      { path: "/system/roles", title: "角色管理", icon: "UserFilled", permission: "role:view" },
-      { path: "/system/organizations", title: "组织管理", icon: "OfficeBuilding", permission: "organization:view" },
-      { path: "/system/audit-logs", title: "审计日志", icon: "Document", permission: "audit_log:view" },
-      { path: "/system/companies", title: "公司管理", icon: "Building", permission: "system:config" },
-      { path: "/system/llm", title: "AI 服务配置", icon: "Cpu", permission: "system:config" },
-    ],
-  },
   {
     path: "/business",
     title: "业务管理",
@@ -197,6 +186,19 @@ const allMenus: MenuItem[] = [
       { path: "/qualifications", title: "资质台账", icon: "Medal", permission: "qualification:view" },
       { path: "/products", title: "产品中心", icon: "Box", permission: "product:view" },
       { path: "/general-knowledge", title: "通用知识库", icon: "Reading", permission: "general_knowledge:view" },
+    ],
+  },
+  {
+    path: "/system",
+    title: "系统管理",
+    icon: "Setting",
+    children: [
+      { path: "/system/users", title: "用户管理", icon: "User", permission: "user:view" },
+      { path: "/system/roles", title: "角色管理", icon: "UserFilled", permission: "role:view" },
+      { path: "/system/organizations", title: "组织管理", icon: "OfficeBuilding", permission: "organization:view" },
+      { path: "/system/audit-logs", title: "审计日志", icon: "Document", permission: "audit_log:view" },
+      { path: "/system/companies", title: "公司管理", icon: "Building", permission: "system:config" },
+      { path: "/system/llm", title: "AI 服务配置", icon: "Cpu", permission: "system:config" },
     ],
   },
 ];
