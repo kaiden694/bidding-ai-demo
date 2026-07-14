@@ -21,4 +21,5 @@ COPY . .
 EXPOSE 8000
 
 # 默认启动命令（docker-compose 会覆盖以支持 --reload）
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Railway 会注入 $PORT 环境变量，默认回退到 8000
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}

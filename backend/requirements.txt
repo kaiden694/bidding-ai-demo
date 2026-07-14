@@ -33,14 +33,10 @@ minio==7.2.13
 PyMuPDF==1.25.2
 pdfplumber==0.11.4
 python-docx==1.1.2
-unstructured==0.16.13
-rapidocr-onnxruntime==1.4.4 ; sys_platform != "darwin"
+# unstructured / rapidocr-onnxruntime 未在代码中使用（可选导入），暂不安装以减小镜像体积
 
-# AI 引擎
+# AI 引擎（仅使用 OpenAI 兼容接口调用远程 LLM/Embedding，无需本地推理）
 openai==1.59.6
-llama-index==0.12.11
-llama-index-vector-stores-postgres==0.4.0
-sentence-transformers==3.4.1
 
 # HTTP/重试/限流
 httpx==0.28.1

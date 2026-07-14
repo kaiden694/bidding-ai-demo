@@ -19,30 +19,29 @@
 [[services.backend]]
 name = "backend"
 root = "backend"
-runtime = "nixpacks"
-startCommand = "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
-# Railway 使用 $PORT 环境变量，不固定 8000
+runtime = "dockerfile"
+# 使用 Dockerfile 构建（已声明 apt-get 系统依赖 + pip install）
+# 启动命令由 Dockerfile CMD 提供，Railway 会自动注入 $PORT
 
 [services.backend.healthcheck]
 path = "/health"
-timeout = 30
+timeout = 60
 
 # ---------- Celery Worker（异步任务）----------
 [[services.worker]]
 name = "worker"
 root = "backend"
-runtime = "nixpacks"
-startCommand = "celery -A app.core.celery_app worker -l info -Q default,parsing,llm --concurrency=2"
-# Worker 无健康检查（无 HTTP 端口）
+runtime = "dockerfile"
+# 复用 backend 镜像，启动命令在 Railway Service Settings 中配置
+# Start Command: celery -A app.core.celery_app worker -l info -Q default,parsing,llm --concurrency=2
 
 # ---------- 前端管理后台（Vue3 + nginx）----------
 [[services.frontend]]
 name = "frontend"
 root = "frontend/admin"
 runtime = "dockerfile"
-# Dockerfile 已配置 nginx 反代 /api → backend:8000
-# 在 Railway 中需要将 backend Service 的域名注入到前端容器
-# 通过 railway.toml 的变量引用：RAILWAY_SERVICE_BACKEND_URL
+# Dockerfile 已配置 nginx 反代 /api → ${BACKEND_HOST}
+# 在 Railway Variables 中设置 BACKEND_HOST=${{backend.RAILWAY_PUBLIC_DOMAIN}}:80
 
 [services.frontend.healthcheck]
 path = "/"
