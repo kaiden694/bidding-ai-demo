@@ -1,6 +1,4 @@
-"""数据库初始化：建表 + 启用扩展 + 种子角色"""
-import os
-
+"""数据库初始化：建表 + 启用扩展 + 种子角色 + 默认管理员"""
 from loguru import logger
 from sqlalchemy import text
 
@@ -57,8 +55,32 @@ async def _patch_phase5_columns() -> None:
     logger.info(f"Phase 5 列补齐完成（{len(_PHASE5_NEW_COLUMNS)} 项）")
 
 
+async def _ensure_admin_user() -> None:
+    """创建默认 admin 用户（幂等：已存在则跳过）"""
+    from sqlalchemy import select
+
+    from app.core.security import hash_password
+    from app.models.user import User
+
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(select(User).where(User.username == "admin"))
+        if result.scalar_one_or_none() is not None:
+            return
+        session.add(
+            User(
+                username="admin",
+                hashed_password=hash_password("admin123"),
+                full_name="系统管理员",
+                is_active=True,
+                is_admin=True,
+            )
+        )
+        await session.commit()
+        logger.info("默认管理员已创建（admin / admin123）")
+
+
 async def init_database():
-    """启动时确保扩展可用 + 表存在（开发环境用；生产用 Alembic）"""
+    """启动时确保扩展可用 + 表存在 + 种子数据 + 默认管理员"""
     async with async_engine.connect() as conn:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
@@ -66,16 +88,18 @@ async def init_database():
         await conn.commit()
         logger.info("PG 扩展已就绪 (vector / pg_trgm / uuid-ossp)")
 
-    # 开发环境直接建表，生产用 alembic upgrade head
-    if os.getenv("APP_ENV", "dev") == "dev":
-        async with async_engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        logger.info("开发环境：表结构已创建（生产请用 alembic）")
+    # 建表（项目未启用 alembic 迁移，统一用 create_all；已存在的表不会被重建）
+    async with async_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    logger.info("表结构已创建/已就绪")
 
-        # Phase 5 新增列补齐（已存在的表不会由 create_all 自动加列）
-        await _patch_phase5_columns()
+    # Phase 5 新增列补齐（已存在的表不会由 create_all 自动加列）
+    await _patch_phase5_columns()
 
-        # 种子数据（角色 + 权限点 + 角色-权限分配）
-        async with AsyncSessionLocal() as session:
-            await seed_all(session)
-        logger.info("种子数据已就绪（角色/权限/分配）")
+    # 种子数据（角色 + 权限点 + 角色-权限分配 + 状态规则 + 待办规则）
+    async with AsyncSessionLocal() as session:
+        await seed_all(session)
+    logger.info("种子数据已就绪（角色/权限/分配）")
+
+    # 默认管理员
+    await _ensure_admin_user()
