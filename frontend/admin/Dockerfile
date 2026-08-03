@@ -25,7 +25,7 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 # nginx 配置模板：启动时通过 envsubst 替换 ${BACKEND_HOST}（支持 docker-compose 和 Railway）
 # docker-compose: BACKEND_HOST=backend:8000
 # Railway: BACKEND_HOST=<backend-service-domain>:80
-RUN printf '%s\n' \
+RUN mkdir -p /etc/nginx/templates && printf '%s\n' \
     'server {' \
     '    listen 80;' \
     '    server_name _;' \
