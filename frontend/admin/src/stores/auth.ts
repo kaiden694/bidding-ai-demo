@@ -153,7 +153,13 @@ export const useAuthStore = defineStore("auth", () => {
   setAuthHandlers({
     getAccessToken: () => accessToken.value,
     refresh,
-    logout: () => clear(),
+    logout: () => {
+      clear();
+      // 跳转登录页（避免停留在需鉴权的页面）
+      if (window.location.pathname !== "/login") {
+        window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
+      }
+    },
   });
 
   return {

@@ -73,6 +73,11 @@ service.interceptors.response.use(
     const detail = error?.response?.data?.detail || error?.message || "请求失败";
 
     if (status === 401) {
+      // /auth/refresh 端点的 401 不再触发 refresh（避免递归死锁）
+      const isRefreshCall = error.config?.url?.includes("/auth/refresh");
+      if (isRefreshCall) {
+        return Promise.reject(error);
+      }
       // 尝试刷新
       const newToken = await doRefresh();
       if (newToken && error.config) {
