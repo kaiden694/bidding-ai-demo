@@ -56,8 +56,8 @@
       <el-table-column prop="code" label="编码" width="120" />
       <el-table-column label="类型" width="120" align="center">
         <template #default="{ row }">
-          <el-tag :type="typeColor[row.company_type] || 'info'" size="small">
-            {{ row.company_type_label || typeLabels[row.company_type] || row.company_type }}
+          <el-tag :type="(typeColor as Record<string, string>)[row.company_type] || 'info'" size="small">
+            {{ row.company_type_label || (typeLabels as Record<string, string>)[row.company_type] || row.company_type }}
           </el-tag>
         </template>
       </el-table-column>

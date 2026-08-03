@@ -35,7 +35,7 @@
           <div v-loading="llmHealthLoading" class="status-grid">
             <div
               v-for="h in llmHealthList"
-              :key="h.id || h.name"
+              :key="h.id ?? h.name ?? ''"
               class="status-item"
               :class="{ ok: h.is_healthy && !h.in_circuit_break, warn: h.is_healthy && h.in_circuit_break, fail: !h.is_healthy }"
             >
@@ -308,8 +308,8 @@
             <el-table-column prop="name" label="名称" min-width="140" />
             <el-table-column label="类型" width="120" align="center">
               <template #default="{ row }">
-                <el-tag :type="ocrTypeColors[row.provider_type] || 'info'" size="small">
-                  {{ ocrTypeLabels[row.provider_type] || row.provider_type }}
+                <el-tag :type="(ocrTypeColors as Record<string, string>)[row.provider_type] || 'info'" size="small">
+                  {{ (ocrTypeLabels as Record<string, string>)[row.provider_type] || row.provider_type }}
                 </el-tag>
               </template>
             </el-table-column>

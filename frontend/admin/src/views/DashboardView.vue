@@ -229,7 +229,8 @@ function expireLabel(date?: string | null) {
   return "正常";
 }
 
-function daysUntil(date: string): number {
+function daysUntil(date?: string | null): number {
+  if (!date) return Number.POSITIVE_INFINITY;
   const t = new Date(date).getTime();
   const today = new Date();
   today.setHours(0, 0, 0, 0);
